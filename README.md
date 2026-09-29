@@ -41,8 +41,11 @@ Or build it yourself (needs the .NET 8 SDK):
 ## Usage
 
 - Drag the widget anywhere. It remembers its position.
+- The widget has no taskbar button. Click its notification area icon to hide or show it; right-click the icon for the menu. Windows may place the icon in the notification area overflow.
+- Launching the app again brings the existing widget back into view.
 - Double-click to refresh right away. By default it refreshes every 5 minutes.
 - Right-click menu:
+  - **Hide widget / Show widget**
   - **Refresh**
   - **Services**: show or hide individual services
   - **Always on top**

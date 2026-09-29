@@ -34,6 +34,8 @@ public class UsageForm : Form
     private readonly System.Windows.Forms.Timer _tickTimer = new() { Interval = 30_000 };
     private readonly ToolStripMenuItem _topMostItem;
     private readonly ToolStripMenuItem _autostartItem;
+    private readonly ToolStripMenuItem _visibilityItem;
+    private readonly NotifyIcon _trayIcon;
 
     private List<UsageSection> _sections = [];
     private DateTime? _updatedAt;
@@ -54,7 +56,7 @@ public class UsageForm : Form
 
         Text = "AI Usage";
         FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = true;
+        ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
         DoubleBuffered = true;
         BackColor = Bg;
@@ -63,6 +65,8 @@ public class UsageForm : Form
         Font = new Font("Segoe UI", 9f);
 
         var menu = new ContextMenuStrip();
+        _visibilityItem = new ToolStripMenuItem("Hide widget", null, (_, _) => ToggleVisibility());
+        menu.Items.Add(_visibilityItem);
         menu.Items.Add("Refresh", null, async (_, _) => await RefreshUsage());
         _topMostItem = new ToolStripMenuItem("Always on top", null, (_, _) =>
         {
@@ -129,6 +133,19 @@ public class UsageForm : Form
         menu.Items.Add("Exit", null, (_, _) => Close());
         ContextMenuStrip = menu;
 
+        _trayIcon = new NotifyIcon
+        {
+            Icon = SystemIcons.Application,
+            Text = "AI Usage Counter",
+            ContextMenuStrip = menu,
+            Visible = true,
+        };
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left) ToggleVisibility();
+        };
+        VisibleChanged += (_, _) => _visibilityItem.Text = Visible ? "Hide widget" : "Show widget";
+
         _fetchTimer.Interval = Math.Max(1, _settings.RefreshMinutes) * 60_000;
         _fetchTimer.Tick += async (_, _) => await RefreshUsage();
         _tickTimer.Tick += (_, _) => Invalidate();
@@ -154,6 +171,27 @@ public class UsageForm : Form
         _settings.Y = Top;
         SaveSettings();
         base.OnFormClosing(e);
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        _trayIcon.Visible = false;
+        _trayIcon.Dispose();
+        _fetchTimer.Dispose();
+        _tickTimer.Dispose();
+        base.OnFormClosed(e);
+    }
+
+    private void ToggleVisibility()
+    {
+        if (Visible) Hide();
+        else ShowWidget();
+    }
+
+    internal void ShowWidget()
+    {
+        Show();
+        Activate();
     }
 
     protected override void OnDpiChanged(DpiChangedEventArgs e)
@@ -204,11 +242,15 @@ public class UsageForm : Form
         finally
         {
             _loading = false;
-            int oldBottom = Bottom;
-            UpdateSize();
-            // Keep the window anchored at its bottom edge if it sits in the lower half of the screen.
-            if (Top > Screen.FromControl(this).WorkingArea.Height / 2) Top += oldBottom - Bottom;
-            Invalidate();
+            if (!IsDisposed && !Disposing)
+            {
+                int oldBottom = Bottom;
+                UpdateSize();
+                // Keep the window anchored at its bottom edge if it sits in the lower half of the screen.
+                var workingArea = Screen.FromControl(this).WorkingArea;
+                if (Top > workingArea.Top + workingArea.Height / 2) Top += oldBottom - Bottom;
+                Invalidate();
+            }
         }
     }
 

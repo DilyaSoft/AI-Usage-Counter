@@ -82,6 +82,26 @@ public class GrokClientTests
         Assert.Null(l.ResetsAt);
     }
 
+    [Theory]
+    [InlineData("""{ "config": {} }""")]
+    [InlineData("""{ "config": { "creditUsagePercent": null } }""")]
+    [InlineData("""{ "config": { "creditUsagePercent": "21" } }""")]
+    public void Parse_MissingOrInvalidCreditUsage_Throws(string response)
+    {
+        var ex = Assert.Throws<UsageException>(() => GrokClient.Parse(Json.Parse(response)));
+        Assert.Contains("creditUsagePercent", ex.Message);
+    }
+
+    [Fact]
+    public void Parse_MissingProductUsage_ThrowsInsteadOfShowingZero()
+    {
+        var response = Json.Parse("""
+            { "creditUsagePercent": 21, "productUsage": [ { "product": "GrokBuild" }, { "product": "Imagine", "usagePercent": 10 } ] }
+            """);
+        var ex = Assert.Throws<UsageException>(() => GrokClient.Parse(response));
+        Assert.Contains("usagePercent", ex.Message);
+    }
+
     [Fact]
     public void ReadPlan_FindsNestedTierDisplay()
     {

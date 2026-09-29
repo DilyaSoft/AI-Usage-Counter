@@ -73,14 +73,14 @@ public static class GrokClient
             };
         }
 
-        var limits = new List<UsageLimit> { new(title, Num(config, "creditUsagePercent"), reset) };
+        var limits = new List<UsageLimit> { new(title, RequiredPercent(config, "creditUsagePercent"), reset) };
 
         // Per-product breakdown is only worth showing when there is more than one product.
         if (config.TryGetProperty("productUsage", out var products) && products.ValueKind == JsonValueKind.Array &&
             products.GetArrayLength() > 1)
         {
             foreach (var p in products.EnumerateArray())
-                limits.Add(new UsageLimit($"{title} — {Str(p, "product") ?? "?"}", Num(p, "usagePercent"), reset));
+                limits.Add(new UsageLimit($"{title} — {Str(p, "product") ?? "?"}", RequiredPercent(p, "usagePercent"), reset));
         }
 
         return limits;
@@ -121,6 +121,10 @@ public static class GrokClient
     private static string? Str(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
-    private static double Num(JsonElement e, string name) =>
-        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
+    private static double RequiredPercent(JsonElement e, string name)
+    {
+        if (e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var value))
+            return value;
+        throw new UsageException($"Grok response is missing or has invalid {name}");
+    }
 }
