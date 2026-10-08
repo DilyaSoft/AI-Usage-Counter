@@ -7,7 +7,8 @@ so we take token handling seriously.
 
 - It reads them from the CLI's own login file (`~/.claude`, `~/.codex`, `~/.grok`).
 - It sends each token only to the service it belongs to (Anthropic, OpenAI or xAI) over HTTPS.
-- It never writes, refreshes, logs or copies tokens anywhere, and it has no telemetry.
+- It never writes, logs or copies tokens, and it has no telemetry.
+- It never calls an OAuth refresh endpoint. When a Claude, Codex or Grok access token is expired or rejected, it starts that CLI so the CLI can rewrite its own login file, then stops the process it started.
 
 ## Reporting a vulnerability
 

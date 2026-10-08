@@ -93,6 +93,19 @@ public class UsageFormatTests
     }
 
     [Fact]
+    public void ForDisplay_HidesClaudeFiveHourSessionUnlessEnabled()
+    {
+        var claude = new UsageSection("Claude", "max",
+            [new("Session (5h)", 10, null), new("Week — all models", 20, null)]);
+        var codex = new UsageSection("Codex", "plus",
+            [new("Session (5h)", 9, null), new("Week", 1, null)]);
+
+        Assert.Equal(["Week — all models"], UsageFormat.ForDisplay(claude, false).Limits.Select(l => l.Title));
+        Assert.Equal(2, UsageFormat.ForDisplay(claude, true).Limits.Count);
+        Assert.Equal(2, UsageFormat.ForDisplay(codex, false).Limits.Count);
+    }
+
+    [Fact]
     public async Task FetchSafe_SuccessAfterFailure_ClearsError()
     {
         var failed = new UsageSection("Claude", null, [], "old error");

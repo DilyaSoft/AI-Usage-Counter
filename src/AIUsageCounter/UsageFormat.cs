@@ -39,6 +39,15 @@ public static class UsageFormat
         return $"{when} (in {rel})";
     }
 
+    /// <summary>
+    /// Claude's 5-hour session is hidden unless the user turns it on. Codex keeps its own session row.
+    /// </summary>
+    public static UsageSection ForDisplay(UsageSection section, bool showClaudeSession)
+    {
+        if (showClaudeSession || section.Name != "Claude") return section;
+        return section with { Limits = section.Limits.Where(l => l.Title != "Session (5h)").ToList() };
+    }
+
     /// <summary>Runs one provider fetch; on failure keeps its last known limits and attaches the error.</summary>
     public static async Task<UsageSection> FetchSafeAsync(string name, Func<Task<UsageSection>> fetch, UsageSection? previous)
     {

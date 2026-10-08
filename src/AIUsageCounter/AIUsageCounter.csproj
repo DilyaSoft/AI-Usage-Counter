@@ -9,10 +9,12 @@
     <AssemblyName>AIUsageCounter</AssemblyName>
     <RootNamespace>AIUsageCounter</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="AIUsageCounter.Tests" />
+    <EmbeddedResource Include="Assets\AppIcon.ico" LogicalName="AIUsageCounter.AppIcon.ico" />
   </ItemGroup>
 
 </Project>

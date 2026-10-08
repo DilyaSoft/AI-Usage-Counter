@@ -12,6 +12,7 @@ public class Settings
     public bool TopMost { get; set; } = true;
     public double Opacity { get; set; } = 0.92;
     public int RefreshMinutes { get; set; } = 5;
+    public bool ShowClaudeSession { get; set; }
     public List<string> HiddenProviders { get; set; } = [];
 }
 
@@ -48,6 +49,13 @@ public class UsageForm : Form
     private const int FooterH = 20;
 
     private readonly bool _demo;
+    private static readonly Icon AppIcon = LoadAppIcon();
+
+    private static Icon LoadAppIcon()
+    {
+        using var stream = typeof(UsageForm).Assembly.GetManifestResourceStream("AIUsageCounter.AppIcon.ico");
+        return stream is null ? SystemIcons.Application : new Icon(stream);
+    }
 
     public UsageForm(bool demo = false)
     {
@@ -117,6 +125,18 @@ public class UsageForm : Form
         servicesMenu.DropDownItems.Add(new ToolStripMenuItem("placeholder"));
         servicesMenu.DropDownOpening += (_, _) => BuildServicesMenu(servicesMenu);
         menu.Items.Insert(1, servicesMenu);
+        var claudeSessionItem = new ToolStripMenuItem("Claude session (5h)")
+        {
+            Checked = _settings.ShowClaudeSession,
+        };
+        claudeSessionItem.Click += (_, _) =>
+        {
+            _settings.ShowClaudeSession = !_settings.ShowClaudeSession;
+            claudeSessionItem.Checked = _settings.ShowClaudeSession;
+            SaveSettings();
+            ApplyLayout();
+        };
+        menu.Items.Insert(2, claudeSessionItem);
 
         var pagesMenu = new ToolStripMenuItem("Open usage page");
         pagesMenu.DropDownItems.Add(new ToolStripMenuItem("placeholder"));
@@ -133,9 +153,10 @@ public class UsageForm : Form
         menu.Items.Add("Exit", null, (_, _) => Close());
         ContextMenuStrip = menu;
 
+        Icon = AppIcon;
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = AppIcon,
             Text = "AI Usage Counter",
             ContextMenuStrip = menu,
             Visible = true,
@@ -206,7 +227,7 @@ public class UsageForm : Form
     private void UpdateSize()
     {
         int h = 4;
-        foreach (var sec in _sections)
+        foreach (var sec in DisplayedSections())
             h += SectionH + sec.Limits.Count * RowH + (sec.Error != null ? ErrorH : 0);
         if (_sections.Count == 0) h += SectionH + ErrorH;
         h += FooterH + 2;
@@ -242,16 +263,22 @@ public class UsageForm : Form
         finally
         {
             _loading = false;
-            if (!IsDisposed && !Disposing)
-            {
-                int oldBottom = Bottom;
-                UpdateSize();
-                // Keep the window anchored at its bottom edge if it sits in the lower half of the screen.
-                var workingArea = Screen.FromControl(this).WorkingArea;
-                if (Top > workingArea.Top + workingArea.Height / 2) Top += oldBottom - Bottom;
-                Invalidate();
-            }
+            ApplyLayout();
         }
+    }
+
+    private IEnumerable<UsageSection> DisplayedSections() =>
+        _sections.Select(s => UsageFormat.ForDisplay(s, _settings.ShowClaudeSession));
+
+    private void ApplyLayout()
+    {
+        if (IsDisposed || Disposing) return;
+        int oldBottom = Bottom;
+        UpdateSize();
+        // Keep the window anchored at its bottom edge if it sits in the lower half of the screen.
+        var workingArea = Screen.FromControl(this).WorkingArea;
+        if (Top > workingArea.Top + workingArea.Height / 2) Top += oldBottom - Bottom;
+        Invalidate();
     }
 
     private void BuildServicesMenu(ToolStripMenuItem servicesMenu)
@@ -308,7 +335,7 @@ public class UsageForm : Form
             g.DrawString(msg, smallFont, text2, new RectangleF(pad, y + S(6), w, S(SectionH + ErrorH)));
         }
 
-        foreach (var sec in _sections)
+        foreach (var sec in DisplayedSections())
         {
             // Section header: colored dot, provider name, plan on the right
             using (var dot = new SolidBrush(Providers.All.FirstOrDefault(p => p.Name == sec.Name)?.Color ?? Text2))

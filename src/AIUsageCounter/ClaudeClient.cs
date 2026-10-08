@@ -13,8 +13,8 @@ public class UsageException(string message) : Exception(message);
 /// <summary>
 /// Reads the Claude Code OAuth token from ~/.claude/.credentials.json and queries
 /// the same usage endpoint that Claude Code's /usage command uses.
-/// The token is never refreshed here (that would rotate Claude Code's refresh token);
-/// Claude Code refreshes it itself whenever it runs.
+/// When the token is rejected, <see cref="ClaudeCliRefresh"/> starts Claude Code and lets
+/// that CLI write a new token. This class never calls the OAuth refresh endpoint itself.
 /// </summary>
 public static class ClaudeClient
 {
@@ -27,7 +27,23 @@ public static class ClaudeClient
 
     public static bool IsConfigured => File.Exists(CredentialsPath);
 
-    public static Task<UsageSection> FetchAsync() => FetchAsync(CredentialsPath, Http, DateTimeOffset.UtcNow);
+    public static async Task<UsageSection> FetchAsync()
+    {
+        string credentialsPath = CredentialsPath;
+        try
+        {
+            return await FetchAsync(credentialsPath, Http, DateTimeOffset.UtcNow);
+        }
+        catch (UsageException ex) when (CanRenew(ex))
+        {
+            if (!await ClaudeCliRefresh.TryRenewAsync(credentialsPath)) throw;
+            return await FetchAsync(credentialsPath, Http, DateTimeOffset.UtcNow);
+        }
+    }
+
+    private static bool CanRenew(UsageException ex) =>
+        ex.Message.Contains("expired", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.StartsWith("401:", StringComparison.Ordinal);
 
     internal static async Task<UsageSection> FetchAsync(string credentialsPath, HttpClient http, DateTimeOffset now)
     {

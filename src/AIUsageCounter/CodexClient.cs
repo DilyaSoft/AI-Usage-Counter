@@ -5,8 +5,9 @@ namespace AIUsageCounter;
 
 /// <summary>
 /// Reads the Codex CLI ChatGPT login from ~/.codex/auth.json and queries the endpoint
-/// Codex uses for its /status rate limits. As with Claude, the token is never refreshed
-/// here (that would rotate Codex's refresh token); Codex refreshes it itself when it runs.
+/// Codex uses for its /status rate limits. When the token is rejected,
+/// <see cref="CodexCliRefresh"/> starts Codex and lets that CLI write a new token.
+/// This class never calls the OAuth refresh endpoint itself.
 /// </summary>
 public static class CodexClient
 {
@@ -18,17 +19,38 @@ public static class CodexClient
 
     public static bool IsConfigured => File.Exists(AuthPath);
 
-    public static Task<UsageSection> FetchAsync() => FetchAsync(AuthPath, Http);
+    public static async Task<UsageSection> FetchAsync()
+    {
+        string authPath = AuthPath;
+        try
+        {
+            return await FetchAsync(authPath, Http, DateTimeOffset.UtcNow);
+        }
+        catch (UsageException ex) when (CanRenew(ex))
+        {
+            if (!await CodexCliRefresh.TryRenewAsync(authPath)) throw;
+            return await FetchAsync(authPath, Http, DateTimeOffset.UtcNow);
+        }
+    }
 
-    internal static async Task<UsageSection> FetchAsync(string authPath, HttpClient http)
+    private static bool CanRenew(UsageException ex) =>
+        ex.Message.Contains("expired", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.StartsWith("401:", StringComparison.Ordinal)
+        || ex.Message.StartsWith("403:", StringComparison.Ordinal);
+
+    internal static async Task<UsageSection> FetchAsync(string authPath, HttpClient http, DateTimeOffset? now = null)
     {
         using var auth = JsonDocument.Parse(await File.ReadAllTextAsync(authPath));
         if (!auth.RootElement.TryGetProperty("tokens", out var tokens) || tokens.ValueKind != JsonValueKind.Object ||
-            !tokens.TryGetProperty("access_token", out var tokenEl))
+            !tokens.TryGetProperty("access_token", out var tokenEl) ||
+            tokenEl.GetString() is not { Length: > 0 } token)
             throw new UsageException("Codex is not signed in with ChatGPT — run codex login");
 
+        if (CodexCliRefresh.TryReadJwtExpiry(token) is DateTimeOffset exp && exp < (now ?? DateTimeOffset.UtcNow))
+            throw new UsageException("Codex token expired — run codex to refresh it");
+
         using var req = new HttpRequestMessage(HttpMethod.Get, UsageUrl);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenEl.GetString());
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (tokens.TryGetProperty("account_id", out var acc) && acc.GetString() is { Length: > 0 } accountId)
             req.Headers.Add("ChatGPT-Account-Id", accountId);
         req.Headers.UserAgent.ParseAdd("codex_cli_rs");

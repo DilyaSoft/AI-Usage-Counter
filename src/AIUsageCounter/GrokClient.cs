@@ -5,8 +5,9 @@ namespace AIUsageCounter;
 
 /// <summary>
 /// Reads the Grok Build CLI login from ~/.grok/auth.json and queries the billing endpoint
-/// the CLI uses for its /usage modal. The token is short-lived and refreshed only by the
-/// Grok CLI itself; it is never refreshed here.
+/// the CLI uses for its /usage modal. The access token only lasts a few hours. When it is
+/// rejected, <see cref="GrokCliRefresh"/> starts the Grok CLI and lets that CLI write a new
+/// token; this class never calls the OAuth refresh endpoint itself.
 /// </summary>
 public static class GrokClient
 {
@@ -20,8 +21,25 @@ public static class GrokClient
 
     public static bool IsConfigured => File.Exists(AuthPath);
 
-    public static Task<UsageSection> FetchAsync() =>
-        FetchAsync(AuthPath, Path.Combine(GrokDir, "settings_cache.json"), Http, DateTimeOffset.UtcNow);
+    public static async Task<UsageSection> FetchAsync()
+    {
+        string authPath = AuthPath;
+        string settingsCachePath = Path.Combine(GrokDir, "settings_cache.json");
+        try
+        {
+            return await FetchAsync(authPath, settingsCachePath, Http, DateTimeOffset.UtcNow);
+        }
+        catch (UsageException ex) when (CanRenew(ex))
+        {
+            if (!await GrokCliRefresh.TryRenewAsync(authPath)) throw;
+            return await FetchAsync(authPath, settingsCachePath, Http, DateTimeOffset.UtcNow);
+        }
+    }
+
+    private static bool CanRenew(UsageException ex) =>
+        ex.Message.Contains("expired", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.StartsWith("401:", StringComparison.Ordinal)
+        || ex.Message.StartsWith("403:", StringComparison.Ordinal);
 
     internal static async Task<UsageSection> FetchAsync(string authPath, string settingsCachePath, HttpClient http, DateTimeOffset now)
     {

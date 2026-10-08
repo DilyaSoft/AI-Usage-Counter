@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A small always-on-top Windows widget that shows how much of your AI coding subscription limits you have used:
-the current session window, the weekly limit, per-model limits, and when each one resets.
+the weekly limit, per-model limits, and when each one resets. Claude's 5-hour session is off unless you turn it on.
 
 ![AI Usage Counter widget showing Claude, Codex and Grok limits (sample data)](docs/widget.png)
 
@@ -12,7 +12,7 @@ It detects which CLIs you are signed in to and only shows those. If you only use
 
 | Service | Detected when this file exists | Override dir with | What is shown |
 |---|---|---|---|
-| Claude (Pro / Max) | `~/.claude/.credentials.json` | `CLAUDE_CONFIG_DIR` | 5-hour session, weekly (all models), weekly per-model |
+| Claude (Pro / Max) | `~/.claude/.credentials.json` | `CLAUDE_CONFIG_DIR` | weekly (all models), weekly per-model. The 5-hour session is hidden until enabled in the menu |
 | Codex (ChatGPT Plus / Pro) | `~/.codex/auth.json` (ChatGPT login) | `CODEX_HOME` | 5-hour and weekly windows, extra limits |
 | Grok (SuperGrok) | `~/.grok/auth.json` | `GROK_HOME` | Credit usage for the current period |
 
@@ -48,6 +48,7 @@ Or build it yourself (needs the .NET 8 SDK):
   - **Hide widget / Show widget**
   - **Refresh**
   - **Services**: show or hide individual services
+  - **Claude session (5h)**: show Claude's 5-hour session. Off by default
   - **Always on top**
   - **Opacity**
   - **Refresh interval**
@@ -68,9 +69,8 @@ The widget reads the OAuth token that each CLI has already saved on your machine
 These requests only read usage numbers. They do not send prompts and do not use up any of your limits.
 Tokens are sent only to the service they belong to, never anywhere else.
 
-The widget **never refreshes tokens**. Refreshing would rotate the CLI's refresh token and sign the CLI out.
-When a token expires, the widget shows `token expired — run <cli>`. Open that CLI once and the widget recovers on its next refresh.
-This happens most with Grok, whose tokens only last a few hours.
+The widget never calls an OAuth refresh endpoint itself. Doing that would rotate the CLI's refresh token and sign the CLI out.
+When a Claude, Codex or Grok access token is expired or rejected, the widget starts that CLI, waits until its login file shows a later expiry, and then stops the process it started. The new token is already on disk by then. If the file does not change, the widget shows `token expired — run <cli>`.
 
 > These endpoints are undocumented internal APIs. A provider can change them at any time, and the widget will then show an error for that service until it is updated.
 
