@@ -82,6 +82,23 @@ public class GrokClientTests
         Assert.Null(l.ResetsAt);
     }
 
+    [Fact]
+    public void Parse_OmittedUsagePercent_IsZeroForTheCurrentPeriod()
+    {
+        var l = Assert.Single(GrokClient.Parse(Json.Parse("""
+            {
+              "config": {
+                "currentPeriod": { "type": "USAGE_PERIOD_TYPE_WEEKLY", "end": "2026-10-17T16:52:02.851903+00:00" },
+                "prepaidBalance": { "val": 56 },
+                "isUnifiedBillingUser": true
+              }
+            }
+            """)));
+        Assert.Equal("Week", l.Title);
+        Assert.Equal(0, l.Percent);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-17T16:52:02.851903+00:00"), l.ResetsAt);
+    }
+
     [Theory]
     [InlineData("""{ "config": {} }""")]
     [InlineData("""{ "config": { "creditUsagePercent": null } }""")]

@@ -91,7 +91,15 @@ public static class GrokClient
             };
         }
 
-        var limits = new List<UsageLimit> { new(title, RequiredPercent(config, "creditUsagePercent"), reset) };
+        // The server omits creditUsagePercent when the period has no spend. The CLI shows that as 0%.
+        if (!TryNumber(config, "creditUsagePercent", out var creditUsage))
+        {
+            if (title == "Period" && reset is null)
+                throw new UsageException("Grok response is missing or has invalid creditUsagePercent");
+            creditUsage = 0;
+        }
+
+        var limits = new List<UsageLimit> { new(title, creditUsage, reset) };
 
         // Per-product breakdown is only worth showing when there is more than one product.
         if (config.TryGetProperty("productUsage", out var products) && products.ValueKind == JsonValueKind.Array &&
@@ -138,6 +146,18 @@ public static class GrokClient
 
     private static string? Str(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    private static bool TryNumber(JsonElement e, string name, out double value)
+    {
+        value = 0;
+        if (!e.TryGetProperty(name, out var v)) return false;
+        if (v.ValueKind == JsonValueKind.Number) return v.TryGetDouble(out value);
+        // prepaidBalance and the on-demand fields are wrapped as { "val": n }.
+        return v.ValueKind == JsonValueKind.Object
+            && v.TryGetProperty("val", out var inner)
+            && inner.ValueKind == JsonValueKind.Number
+            && inner.TryGetDouble(out value);
+    }
 
     private static double RequiredPercent(JsonElement e, string name)
     {
